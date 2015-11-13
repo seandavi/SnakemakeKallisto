@@ -33,42 +33,28 @@ cutadapt -q 10 --minimum-length 25 --trim-n \
   {input}
 """
 
-rule generateGenome:
-    input: GENOMEFASTA, GTF
-    output: "GenomeDir/abc"
+rule kallisto_index:
+    input: TRANSCRIPT_FASTA
+    output: "kallisto.index"
     threads: 32
     params:
         partition = "ccr",
-        mem = "58g",
-        time = "24:00:00"
-    shell: """
-module load STAR
-STAR \
-    --runMode genomeGenerate \
-    --runThreadN {threads} \
-    --genomeFastaFiles {input[0]} \
-    --sjdbGTFfile {input[1]} \
-    --sjdbOverhang 75 \
-    --genomeDir GenomeDir
-"""    
-    
-rule align:
-    input: "fastq/{base}_R1.trimmed.fastq.gz", "fastq/{base}_R2.trimmed.fastq.gz", "GenomeDir/abc"
-    output: "bam/{base}.Aligned.sortedByCoord.out.bam"
+        mem = "8g",
+        time = "4:00:00",
+    shell:"""
+module load kallisto
+kallisto index -i kallisto.index {input}
+"""
+        
+rule kallisto_quant:
+    input: "fastq/{base}_R1.trimmed.fastq.gz", "fastq/{base}_R2.trimmed.fastq.gz", "kallisto.index"
+    output: "bam/{base}/abundance.txt"
     threads: 32
     params:
         partition = "ccr",
-        mem = "58g",
-        time = "24:00:00",
-        outdir = "bam/{base}."
+        mem = "8g",
+        time = "4:00:00"
     shell: """
-module load STAR
-STAR \
-    --runThreadN {threads} \
-    --genomeDir {input[2]} \
-    --readFilesIn {input[0]} {input[1]} \
-    --readFilesCommand zcat \
-    --outSAMtype BAM SortedByCoordinate \
-    --quantMode TranscriptomeSAM GeneCounts \
-    --outFileNamePrefix {params.outdir}
+module load kallisto
+kallisto quant --bias -i {input[2]} -t {threads} {input[0]} {input[1]}
 """

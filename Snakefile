@@ -1,22 +1,15 @@
 import os
 import logging
 
-GENOMEFASTA="Mus_musculus.GRCm38.dna.toplevel.fa"
-GTF = "Mus_musculus.GRCm38.82.gtf"
+TRANSCRIPT_FASTA="Mus_musculus.GRCm38.cdna.all.fa"
 
 FASTQDIR = "fastq/"
 fnames = os.listdir(FASTQDIR)
 samples = set([x[0:11] for x in fnames])
 fnames = [FASTQDIR + f for f in fnames]
 
-BAMS = ["bam/" + s + ".Aligned.sortedByCoord.out.bam" for s in samples]
-logging.info('input filenames:')
-for f in fnames:
-    logging.info('   '+f)
-logging.info(BAMS)
-    
 rule final:
-    input: BAMS
+    input: expand("results/{sample}/abundance.txt",sample=samples)
 
 rule trim:
     input: "{base}_R1.fastq.gz", "{base}_R2.fastq.gz"
@@ -36,11 +29,10 @@ cutadapt -q 10 --minimum-length 25 --trim-n \
 rule kallisto_index:
     input: TRANSCRIPT_FASTA
     output: "kallisto.index"
-    threads: 32
     params:
-        partition = "ccr",
+        partition = "quick",
         mem = "8g",
-        time = "4:00:00",
+        time = "1:00:00"
     shell:"""
 module load kallisto
 kallisto index -i kallisto.index {input}
@@ -48,13 +40,14 @@ kallisto index -i kallisto.index {input}
         
 rule kallisto_quant:
     input: "fastq/{base}_R1.trimmed.fastq.gz", "fastq/{base}_R2.trimmed.fastq.gz", "kallisto.index"
-    output: "bam/{base}/abundance.txt"
+    output: "results/{base}/abundance.tsv"
     threads: 32
     params:
-        partition = "ccr",
+        partition = "quick",
         mem = "8g",
-        time = "4:00:00"
+        time = "1:00:00",
+        outdir = "results/{base}"
     shell: """
 module load kallisto
-kallisto quant --bias -i {input[2]} -t {threads} {input[0]} {input[1]}
+kallisto quant --bias -o {params.outdir} -i {input[2]} -t {threads} {input[0]} {input[1]}
 """

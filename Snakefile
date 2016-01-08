@@ -3,13 +3,12 @@ import logging
 
 TRANSCRIPT_FASTA="Mus_musculus.GRCm38.cdna.all.fa"
 
-FASTQDIR = "fastq/"
-fnames = os.listdir(FASTQDIR)
-samples = set([x[0:11] for x in fnames])
-fnames = [FASTQDIR + f for f in fnames]
+import config
+
+samples = set(x['sample'] for x in config.studyresults)
 
 rule final:
-    input: expand("results/{sample}/abundance.txt",sample=samples)
+    input: expand("results/{sample}/abundance.tsv",sample=samples)
 
 rule trim:
     input: "{base}_R1.fastq.gz", "{base}_R2.fastq.gz"
@@ -29,25 +28,27 @@ cutadapt -q 10 --minimum-length 25 --trim-n \
 rule kallisto_index:
     input: TRANSCRIPT_FASTA
     output: "kallisto.index"
+    threads: 1
     params:
         partition = "quick",
-        mem = "8g",
-        time = "1:00:00"
+        mem = "32000",
+        time = "1:30:00",
+        version = '0.42.4'
     shell:"""
-module load kallisto
+module load kallisto/{params.version}
 kallisto index -i kallisto.index {input}
 """
         
 rule kallisto_quant:
-    input: "fastq/{base}_R1.trimmed.fastq.gz", "fastq/{base}_R2.trimmed.fastq.gz", "kallisto.index"
+    input: fastq=config.sample2fastq, index="kallisto.index"
     output: "results/{base}/abundance.tsv"
     threads: 32
     params:
         partition = "quick",
         mem = "8g",
-        time = "1:00:00",
-        outdir = "results/{base}"
-    shell: """
-module load kallisto
-kallisto quant --bias -o {params.outdir} -i {input[2]} -t {threads} {input[0]} {input[1]}
+        time = "1:30:00",
+        outdir = "results/{base}",
+        version = "0.42.4"
+    shell: """module load kallisto/{params.version}
+kallisto quant --bias -o {params.outdir} -i {input.index} -t {threads} {input.fastq}
 """
